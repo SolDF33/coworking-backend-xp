@@ -51,14 +51,14 @@ En cumplimiento con la metodología XP y BDD, se evidencia el ciclo de desarroll
 ### 1. Fase RED (Fallo Controlado por Ausencia de Lógica)
 Prueba de Cucumber ejecutada antes de implementar los servicios de negocio en TypeScript, verificando que los escenarios fallan correctamente:
 
-![Fase RED - Prueba Fallida](docs/assets/faseRED.png)
+![Fase RED - Prueba Fallida](docs/faseRED.png)
 
 ---
 
 ### 2. Fase GREEN (Implementación del Código Mínimo)
 Prueba de Cucumber ejecutada tras desarrollar la arquitectura en capas y la lógica de dominio en TypeScript, logrando el éxito de la suite BDD:
 
-![Fase GREEN - Prueba Exitosa](docs/assets/faseGREEN.png)
+![Fase GREEN - Prueba Exitosa](docs/faseGREEN.png)
 
 ---
 
