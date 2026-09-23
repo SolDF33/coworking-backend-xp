@@ -15,8 +15,11 @@
   "type": "commonjs",
   "devDependencies": {
     "@cucumber/cucumber": "^13.2.1",
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
     "@types/cucumber": "^6.0.1",
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.20.3",
     "cross-env": "^10.1.0",
     "ts-node": "^10.9.2",
@@ -25,7 +28,11 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "jsonwebtoken": "^9.0.3"
   }
 }
