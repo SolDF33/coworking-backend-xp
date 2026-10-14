@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id             String         @id
+  nombre         String
+  email          String         @unique
+  password       String
+  rol            String         @default("USER")
+  saldoCreditos  Int            @default(100)
+  reservas       Reserva[]
+  refreshTokens  RefreshToken[]
+}
+
+model RefreshToken {
+  tokenHash String   @id
+  userId    String
+  expiresAt DateTime
+  usuario   Usuario  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Sala {
+  id          String @id
+  nombre      String
+  descripcion String
+  capacidad   Int
+}
+
+model Reserva {
+  id             String  @id
+  usuarioId      String
+  sala           String
+  fecha          String
+  costoCreditos  Int
+  estado         String  @default("Confirmada")
+  bloqueActivo   String? @unique
+  usuario        Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([sala, fecha])
+}

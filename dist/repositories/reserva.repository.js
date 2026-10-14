@@ -1,69 +1,151 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReservaRepository = void 0;
+const prisma_js_1 = require("../database/prisma.js");
+const mapReserva = (reserva) => {
+    if (reserva.estado !== 'Confirmada' && reserva.estado !== 'Cancelada') {
+        throw new Error(`Estado de reserva no reconocido: ${reserva.estado}`);
+    }
+    return { ...reserva, estado: reserva.estado };
+};
+const mapUsuario = (usuario) => {
+    if (usuario.rol !== 'USER' && usuario.rol !== 'EDITOR' && usuario.rol !== 'ADMIN') {
+        throw new Error(`Rol de usuario no reconocido: ${usuario.rol}`);
+    }
+    const rol = usuario.rol;
+    return { ...usuario, rol };
+};
 class ReservaRepository {
-    reservas = [];
-    usuarios = [];
-    articulos = [];
-    refreshTokens = new Map();
-    // --- Métodos para Reservas ---
-    listar() {
-        return [...this.reservas];
+    database;
+    constructor(database = prisma_js_1.prisma) {
+        this.database = database;
     }
-    buscarPorId(id) {
-        return this.reservas.find((reserva) => reserva.id === id);
+    async listar() {
+        const reservas = await this.database.reserva.findMany();
+        return reservas.map(mapReserva);
     }
-    guardar(reserva) {
-        this.reservas.push(reserva);
-        return reserva;
+    async listarPorUsuario(usuarioId) {
+        const reservas = await this.database.reserva.findMany({
+            where: { usuarioId },
+            orderBy: { fecha: 'asc' }
+        });
+        return reservas.map(mapReserva);
     }
-    actualizar(reservaActualizada) {
-        const indice = this.reservas.findIndex((reserva) => reserva.id === reservaActualizada.id);
-        if (indice === -1) {
-            throw new Error('Reserva no encontrada');
-        }
-        this.reservas[indice] = reservaActualizada;
-        return reservaActualizada;
+    async buscarPorId(id) {
+        const reserva = await this.database.reserva.findUnique({ where: { id } });
+        return reserva ? mapReserva(reserva) : undefined;
     }
-    // --- Métodos para Usuarios (Autenticación) ---
-    guardarUsuario(usuario) {
-        this.usuarios.push(usuario);
-        return usuario;
+    async guardar(reserva) {
+        const guardada = await this.database.reserva.create({ data: reserva });
+        return mapReserva(guardada);
     }
-    obtenerUsuarioPorEmail(email) {
-        return this.usuarios.find((usuario) => usuario.email === email);
+    async actualizar(reservaActualizada) {
+        const actualizada = await this.database.reserva.update({
+            where: { id: reservaActualizada.id },
+            data: reservaActualizada
+        });
+        return mapReserva(actualizada);
     }
-    obtenerUsuarioPorId(id) {
-        return this.usuarios.find((usuario) => usuario.id === id);
+    async listarSalasDisponibles(fecha, hora, capacidad) {
+        const salas = await this.database.sala.findMany({
+            where: { capacidad: { gte: capacidad } },
+            orderBy: { nombre: 'asc' }
+        });
+        const reservasActivas = await this.database.reserva.findMany({
+            where: {
+                fecha: `${fecha}T${hora}`,
+                estado: 'Confirmada',
+                sala: { in: salas.map((sala) => sala.id) }
+            },
+            select: { sala: true }
+        });
+        const ocupadas = new Set(reservasActivas.map((reserva) => reserva.sala));
+        return salas.filter((sala) => !ocupadas.has(sala.id));
     }
-    guardarArticulo(articulo) {
-        this.articulos.push(articulo);
-        return articulo;
+    async guardarUsuario(usuario) {
+        return mapUsuario(await this.database.usuario.create({ data: usuario }));
     }
-    obtenerArticuloPorId(id) {
-        return this.articulos.find((articulo) => articulo.id === id);
+    async obtenerUsuarioPorEmail(email) {
+        const usuario = await this.database.usuario.findUnique({ where: { email } });
+        return usuario ? mapUsuario(usuario) : undefined;
     }
-    actualizarArticulo(articulo) {
-        const indice = this.articulos.findIndex((actual) => actual.id === articulo.id);
-        if (indice === -1) {
-            throw new Error('Artículo no encontrado');
-        }
-        this.articulos[indice] = articulo;
-        return articulo;
+    async obtenerUsuarioPorId(id) {
+        const usuario = await this.database.usuario.findUnique({ where: { id } });
+        return usuario ? mapUsuario(usuario) : undefined;
     }
-    guardarRefreshToken(tokenHash, userId, expiresAt) {
-        this.refreshTokens.set(tokenHash, { userId, expiresAt });
+    async listarSalas() {
+        return this.database.sala.findMany();
     }
-    obtenerRefreshToken(tokenHash) {
-        const session = this.refreshTokens.get(tokenHash);
-        if (!session || session.expiresAt <= Date.now()) {
-            this.refreshTokens.delete(tokenHash);
+    async guardarSala(sala) {
+        return this.database.sala.create({ data: sala });
+    }
+    async obtenerSalaPorId(id) {
+        return (await this.database.sala.findUnique({ where: { id } })) ?? undefined;
+    }
+    async actualizarSala(sala) {
+        return this.database.sala.update({ where: { id: sala.id }, data: sala });
+    }
+    async crearReserva(reserva) {
+        return this.database.$transaction(async (transaction) => {
+            const actualizacionSaldo = await transaction.usuario.updateMany({
+                where: {
+                    id: reserva.usuarioId,
+                    saldoCreditos: { gte: reserva.costoCreditos }
+                },
+                data: { saldoCreditos: { decrement: reserva.costoCreditos } }
+            });
+            if (actualizacionSaldo.count === 0) {
+                throw new Error('Saldo insuficiente');
+            }
+            const guardada = await transaction.reserva.create({
+                data: {
+                    ...reserva,
+                    bloqueActivo: `${reserva.sala}:${reserva.fecha}`
+                }
+            });
+            return mapReserva(guardada);
+        });
+    }
+    async cancelarReserva(id, reembolsar) {
+        return this.database.$transaction(async (transaction) => {
+            const reserva = await transaction.reserva.findUnique({ where: { id } });
+            if (!reserva || reserva.estado !== 'Confirmada') {
+                return undefined;
+            }
+            const cancelada = await transaction.reserva.updateMany({
+                where: { id, estado: 'Confirmada' },
+                data: { estado: 'Cancelada', bloqueActivo: null }
+            });
+            if (cancelada.count === 0) {
+                return undefined;
+            }
+            if (reembolsar) {
+                await transaction.usuario.update({
+                    where: { id: reserva.usuarioId },
+                    data: { saldoCreditos: { increment: reserva.costoCreditos } }
+                });
+            }
+            return mapReserva((await transaction.reserva.findUniqueOrThrow({ where: { id } })));
+        });
+    }
+    async guardarRefreshToken(tokenHash, userId, expiresAt) {
+        await this.database.refreshToken.create({
+            data: { tokenHash, userId, expiresAt: new Date(expiresAt) }
+        });
+    }
+    async obtenerRefreshToken(tokenHash) {
+        const session = await this.database.refreshToken.findUnique({ where: { tokenHash } });
+        if (!session) {
             return undefined;
         }
-        return session;
+        if (session.expiresAt.getTime() <= Date.now()) {
+            await this.database.refreshToken.delete({ where: { tokenHash } });
+            return undefined;
+        }
+        return { userId: session.userId, expiresAt: session.expiresAt.getTime() };
     }
-    revocarRefreshToken(tokenHash) {
-        this.refreshTokens.delete(tokenHash);
+    async revocarRefreshToken(tokenHash) {
+        await this.database.refreshToken.deleteMany({ where: { tokenHash } });
     }
 }
 exports.ReservaRepository = ReservaRepository;

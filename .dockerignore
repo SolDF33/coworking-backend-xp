@@ -1,0 +1,12 @@
+node_modules
+dist
+frontend/node_modules
+frontend/dist
+.git
+.env
+.env.*
+!.env.example
+prisma/data
+*.db
+*.db-journal
+npm-debug.log*

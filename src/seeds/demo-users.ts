@@ -31,7 +31,7 @@ const USUARIOS_DEMO: ReadonlyArray<{
 
 export const cargarUsuariosDemo = async (repository: ReservaRepository): Promise<void> => {
   for (const usuarioDemo of USUARIOS_DEMO) {
-    if (repository.obtenerUsuarioPorEmail(usuarioDemo.email)) {
+    if (await repository.obtenerUsuarioPorEmail(usuarioDemo.email)) {
       continue;
     }
 
@@ -44,6 +44,41 @@ export const cargarUsuariosDemo = async (repository: ReservaRepository): Promise
       saldoCreditos: 100
     };
 
-    repository.guardarUsuario(usuario);
+    await repository.guardarUsuario(usuario);
   }
+};
+
+export const cargarAdministradorInicial = async (repository: ReservaRepository): Promise<void> => {
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!email && !password) {
+    return;
+  }
+  if (!email || !password) {
+    throw new Error('ADMIN_EMAIL y ADMIN_PASSWORD deben configurarse juntos');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('ADMIN_EMAIL no tiene un formato válido');
+  }
+  if (password.length < 12) {
+    throw new Error('ADMIN_PASSWORD debe tener al menos 12 caracteres');
+  }
+
+  const existente = await repository.obtenerUsuarioPorEmail(email);
+  if (existente) {
+    if (existente.rol !== 'ADMIN') {
+      throw new Error('ADMIN_EMAIL ya pertenece a un usuario que no es administrador');
+    }
+    return;
+  }
+
+  await repository.guardarUsuario({
+    id: randomUUID(),
+    nombre: 'Administrador',
+    email,
+    password: await bcrypt.hash(password, 12),
+    rol: 'ADMIN',
+    saldoCreditos: 100
+  });
 };

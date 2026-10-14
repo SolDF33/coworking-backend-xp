@@ -38,7 +38,7 @@ export class AuthController {
         });
       }
 
-      if (this.repository.obtenerUsuarioPorEmail(emailNormalizado)) {
+      if (await this.repository.obtenerUsuarioPorEmail(emailNormalizado)) {
         return res.status(409).json({ error: 'El email ya está registrado' });
       }
 
@@ -56,7 +56,7 @@ export class AuthController {
         saldoCreditos: 100
       };
 
-      this.repository.guardarUsuario(nuevoUsuario);
+      await this.repository.guardarUsuario(nuevoUsuario);
       return res.status(201).json({ mensaje: 'Usuario registrado exitosamente' });
     } catch (error: unknown) {
       const detalle = error instanceof Error ? error.message : 'Error desconocido';
@@ -74,7 +74,7 @@ export class AuthController {
         });
       }
 
-      const usuario = this.repository.obtenerUsuarioPorEmail(email.trim().toLowerCase());
+      const usuario = await this.repository.obtenerUsuarioPorEmail(email.trim().toLowerCase());
 
       if (!usuario) {
         return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -89,44 +89,50 @@ export class AuthController {
       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
       const refreshToken = crypto.randomBytes(48).toString('hex');
       const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-      this.repository.guardarRefreshToken(
+      await this.repository.guardarRefreshToken(
         refreshTokenHash,
         usuario.id,
         Date.now() + 7 * 24 * 60 * 60 * 1000
       );
 
       return res.json({ mensaje: 'Inicio de sesión exitoso', token, refreshToken });
-    } catch {
+    } catch (error: unknown) {
+      console.error('Error al iniciar sesión:', error);
       return res.status(500).json({ error: 'Error en el servidor' });
     }
   };
 
-  refresh = (req: Request, res: Response) => {
-    const { refreshToken } = req.body;
-    if (typeof refreshToken !== 'string' || !refreshToken) {
-      return res.status(400).json({ error: 'refreshToken es obligatorio' });
-    }
+  refresh = async (req: Request, res: Response) => {
+    try {
+      const { refreshToken } = req.body;
+      if (typeof refreshToken !== 'string' || !refreshToken) {
+        return res.status(400).json({ error: 'refreshToken es obligatorio' });
+      }
 
-    const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-    const session = this.repository.obtenerRefreshToken(hash);
-    if (!session) {
-      return res.status(401).json({ error: 'Refresh token inválido o expirado' });
-    }
+      const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+      const session = await this.repository.obtenerRefreshToken(hash);
+      if (!session) {
+        return res.status(401).json({ error: 'Refresh token inválido o expirado' });
+      }
 
-    const usuario = this.repository.obtenerUsuarioPorId(session.userId);
-    if (!usuario) {
-      return res.status(401).json({ error: 'Usuario no encontrado' });
-    }
+      const usuario = await this.repository.obtenerUsuarioPorId(session.userId);
+      if (!usuario) {
+        return res.status(401).json({ error: 'Usuario no encontrado' });
+      }
 
-    this.repository.revocarRefreshToken(hash);
-    const token = jwt.sign({ id: usuario.id, rol: usuario.rol }, JWT_SECRET, { expiresIn: '15m' });
-    const nuevoRefreshToken = crypto.randomBytes(48).toString('hex');
-    const nuevoHash = crypto.createHash('sha256').update(nuevoRefreshToken).digest('hex');
-    this.repository.guardarRefreshToken(
-      nuevoHash,
-      usuario.id,
-      Date.now() + 7 * 24 * 60 * 60 * 1000
-    );
-    return res.json({ token, refreshToken: nuevoRefreshToken });
+      await this.repository.revocarRefreshToken(hash);
+      const token = jwt.sign({ id: usuario.id, rol: usuario.rol }, JWT_SECRET, { expiresIn: '15m' });
+      const nuevoRefreshToken = crypto.randomBytes(48).toString('hex');
+      const nuevoHash = crypto.createHash('sha256').update(nuevoRefreshToken).digest('hex');
+      await this.repository.guardarRefreshToken(
+        nuevoHash,
+        usuario.id,
+        Date.now() + 7 * 24 * 60 * 60 * 1000
+      );
+      return res.json({ token, refreshToken: nuevoRefreshToken });
+    } catch (error: unknown) {
+      console.error('Error al renovar la sesión:', error);
+      return res.status(500).json({ error: 'Error en el servidor' });
+    }
   };
 }
