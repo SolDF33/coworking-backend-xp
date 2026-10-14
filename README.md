@@ -169,12 +169,44 @@ npm run build --prefix frontend
 disponibilidad, prevención de solapamientos, saldo, reembolsos y permisos usando
 una base de datos SQLite de prueba.
 
-La suite BDD actual contiene 12 escenarios y 51 pasos. Se conservan las
-[evidencias de las fases XP](docs/Fases/faseRED.png) ([GREEN](docs/Fases/faseGREEN.png))
-y las [capturas de pruebas de seguridad anteriores](docs/seguridad/Build-Test.png).
-Las capturas de Postman que muestran artículos o edición por propietario
-pertenecen a una versión anterior y no representan los endpoints actuales de
-salas y reservas.
+La suite BDD actual contiene 12 escenarios y 51 pasos.
+
+### Evidencias históricas de Postman
+
+Estas capturas corresponden a las pruebas de la versión anterior de la API.
+Se conservan como evidencia histórica; las pruebas de artículos no representan
+los endpoints actuales de salas y reservas.
+
+| # | Prueba | Resultado esperado | Evidencia |
+|---|---|---|---|
+| 1 | `GET /health` | `200 OK` | [COWORKING-GET](docs/seguridad/COWORKING-GET.png) |
+| 2 | `POST /api/registro` | `201 Created` | [Crear usuario](docs/seguridad/CrearUsuario.png) |
+| 3 | `POST /api/login` válido | `200 OK` y JWT | [Iniciar sesión](docs/seguridad/IniciarSesión.png) |
+| 4 | `GET /api/perfil` con JWT | `200 OK` | [Perfil con JWT](docs/seguridad/ConsultarPerfilConJWT.png) |
+| 5 | `GET /api/perfil` sin JWT | `401 Unauthorized` | [Perfil sin token](docs/seguridad/ConsultaPerfilSinToken.png) |
+| 6 | Crear artículo como ADMIN | `201 Created` | [Crear como ADMIN](docs/seguridad/CrearComoAdmin.png) |
+| 7 | Crear artículo como USER | `403 Forbidden` | [Crear como USER](docs/seguridad/CrearComoUSER.png) |
+| 8 | Login con contraseña incorrecta | `401 Unauthorized` | [Login incorrecto](docs/seguridad/LoginIncorrecto.png) |
+| 9 | Email duplicado | `409 Conflict` | [Email duplicado](docs/seguridad/EmailDuplicado.png) |
+| 10 | Build y BDD | Exitosos | [Build y tests](docs/seguridad/Build-Test.png) |
+| 11 | `POST /api/refresh` | Nuevo token | [Refresh token](docs/seguridad/RefreshToken.png) |
+| 12 | Sexto login inválido | `429 Too Many Requests` | [Rate limiting](docs/seguridad/RateLimiting.png) |
+| 13 | Usuario no propietario edita | `403 Forbidden` | [Prueba IDOR](docs/seguridad/EditarComoUSER(IDOR).png) |
+| 14 | Access token expirado | `403 Forbidden` | [Token expirado](docs/seguridad/RefreshToken3.png) |
+
+Pruebas complementarias:
+
+- CORS con origen permitido: [CORS](docs/seguridad/CORS.png).
+- Edición por propietario: [Artículo propio](docs/seguridad/CrearComoEditor(IDOR).png).
+- Edición por administrador: [Eliminar como ADMIN](docs/seguridad/EliminarUsuarioComoADMIN.png).
+- Contraseña corta: [Contraseña corta](docs/seguridad/ContraseñaCorta.png).
+- Email inválido: [Email inválido](docs/seguridad/EmailInvalido.png).
+
+### Evidencias XP y BDD
+
+![Fase RED](docs/Fases/faseRED.png)
+
+![Fase GREEN](docs/Fases/faseGREEN.png)
 
 ## Estructura del proyecto
 
