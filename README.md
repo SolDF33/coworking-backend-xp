@@ -41,7 +41,7 @@ Copy-Item .env.example .env
 docker compose up --build
 ```
 
-- Frontend: <http://localhost:8080>
+- Frontend: <http://localhost:8081>
 - API: <http://localhost:3000>
 - Estado de la API: <http://localhost:3000/health>
 
@@ -107,6 +107,9 @@ al iniciar sesión en la cabecera HTTP `Authorization`.
 | `GET` | `/api/salas/disponibles?fecha=AAAA-MM-DD&hora=HH:00&capacidad=1` | Público |
 | `POST` | `/api/salas` | `EDITOR` o `ADMIN` |
 | `PUT` | `/api/salas/:id` | `EDITOR` o `ADMIN` |
+| `GET` | `/api/reportes` | `ADMIN`; lista los 20 reportes más recientes |
+| `POST` | `/api/reportes` | `ADMIN`; solicita un reporte |
+| `GET` | `/api/reportes/:id` | `ADMIN`; consulta estado y resultado |
 | `GET` | `/api/reservas` | Usuario autenticado; solo sus reservas |
 | `POST` | `/api/reservas` | Usuario autenticado |
 | `DELETE` | `/api/reservas/:id` | Propietario o `ADMIN` |
@@ -162,6 +165,7 @@ Son credenciales de demostración: no usarlas fuera de un entorno local.
 npm run build
 npm run test:e2e
 npm run test:api
+npm run test:load
 npm run build --prefix frontend
 ```
 
@@ -221,3 +225,172 @@ features/            Escenarios BDD
 
 La API persiste usuarios, salas, reservas y refresh tokens con Prisma. El
 frontend usa el proxy de Vite en desarrollo y Nginx con proxy `/api` en Docker.
+
+## Anexo — Requerimientos de la etapa de concurrencia y reportes
+
+Este anexo registra los avances de la etapa solicitada por el cliente. Las
+secciones y evidencias anteriores se conservan como historial del proyecto.
+
+### Reservas concurrentes
+
+- Las reservas y el descuento de créditos se ejecutan atómicamente.
+- La base de datos impide más de una reserva activa para la misma sala y turno.
+- Si hay solicitudes simultáneas, solo una puede reservar el turno; las demás
+  reciben `409 Conflict` sin perder créditos.
+- El descuento condicional de créditos impide un saldo negativo aunque un mismo
+  usuario intente reservar varios turnos a la vez.
+
+### Reportes administrativos
+
+- `POST /api/reportes` recibe `fechaDesde` y `fechaHasta` inclusivas en formato
+  `AAAA-MM-DD`; responde `202 Accepted` con un identificador y estado `queued`.
+- `GET /api/reportes/:id` devuelve el estado (`queued`, `running`,
+  `completed` o `failed`) y, al completarse, el total de reservas y
+  cancelaciones, también desglosado por sala.
+- `GET /api/reportes` lista los 20 reportes más recientes para que ADMIN pueda
+  recuperar reportes solicitados anteriormente, incluso después de reiniciar o
+  abrir la interfaz en otro navegador.
+- Todos los endpoints de reportes requieren token de sesión válido y rol
+  `ADMIN`. Las solicitudes sin autenticación reciben `401`; un rol sin permiso
+  recibe `403`.
+- El cálculo corre en un worker thread. El estado y el resultado se guardan en
+  SQLite; los trabajos interrumpidos durante el estado `running` se reencolan al
+  reiniciar el backend.
+- El período cuenta las reservas por su fecha de creación y las cancelaciones
+  por su fecha de cancelación. No es posible reconstruir fechas de cancelación
+  históricas que no se guardaban antes de esta etapa.
+- La interfaz administrativa permite solicitar el reporte, ver su estado y
+  consultar los resultados.
+
+### Verificación automatizada de esta etapa
+
+Los escenarios BDD anteriores siguen registrados arriba como evidencia de la
+etapa previa: 12 escenarios y 51 pasos. Con los nuevos escenarios, la suite
+actual ejecuta **16 escenarios y 101 pasos**. `npm run test:api` agrega pruebas
+de simultaneidad, saldo insuficiente, permisos y persistencia/recuperación de
+reportes.
+
+`npm run test:load` usa una base SQLite de prueba independiente de la base local
+y del volumen Docker. Envía 25 reservas simultáneas para el mismo turno y mide
+la respuesta concurrente, además de contrastar la aceptación en segundo plano
+con un cálculo síncrono de referencia sobre 5.001 registros. Para la corrida
+registrada:
+
+| Medición | Resultado |
+|---|---:|
+| Intentos de reserva simultáneos | 25 |
+| Reservas exitosas / conflictos esperados / errores inesperados | 1 / 24 / 0 |
+| Cálculo síncrono de referencia (5.001 registros) | 44,64 ms |
+| Aceptación HTTP del reporte en segundo plano | 27,51 ms |
+| Reducción de latencia de aceptación vs. referencia | 38,37 % |
+| `/health` durante el procesamiento | HTTP 200 en 3,72 ms |
+| Reporte completado | 349,10 ms |
+
+Los tiempos son evidencia de una ejecución y pueden variar según el equipo. El
+comando imprime mediciones nuevas cada vez que se ejecuta.
+
+### Evidencias recomendadas en Postman
+
+Sí: conviene probar los endpoints REST en Postman y guardar capturas de
+solicitud y respuesta como evidencia para la presentación. Usar como URL base
+`http://localhost:3000` con Docker o `http://localhost:3000` en desarrollo
+local.
+
+#### Concurrencia de reservas
+
+1. Iniciar sesión con dos cuentas `USER` distintas mediante `POST /api/login`.
+   Cada cuenta debe tener al menos 50 créditos; guardar cada token en una
+   variable local separada de Postman.
+2. Elegir una sala existente con `GET /api/salas` y un turno futuro libre.
+   Preparar dos solicitudes `POST /api/reservas` con el mismo `salaId`, `fecha`
+   y `hora`, usando el token de cada usuario.
+3. Enviar las solicitudes casi al mismo tiempo. Debe resultar exactamente una
+   respuesta `201 Created` y otra `409 Conflict`.
+4. Consultar `GET /api/perfil` y `GET /api/reservas` con ambos tokens: al
+   ganador se le deben descontar exactamente 50 créditos y debe aparecerle una
+   reserva; el otro debe conservar su saldo y no tener esa reserva.
+5. Para evidencia reproducible de solicitudes realmente simultáneas, ejecutar
+   `npm run test:load`. El Runner de Postman no garantiza que solicitudes de
+   una colección se envíen en paralelo.
+
+#### Persistencia después de reiniciar
+
+1. Antes del reinicio, guardar el saldo de un usuario, el registro de una
+   reserva exitosa y el identificador de un reporte completado.
+2. Ejecutar `docker compose restart` y esperar a que `GET /health` responda
+   nuevamente `200`.
+3. Repetir `GET /api/perfil` y `GET /api/reservas` con el mismo usuario, y
+   `GET /api/reportes/{{reportId}}` con ADMIN. El saldo, la reserva y el
+   resultado deben seguir guardados. No usar `docker compose down -v`.
+
+#### Reportes y autorización
+
+1. Iniciar sesión con una cuenta `ADMIN` mediante `POST /api/login`, con
+   `email` y `password` en JSON. Guardar el `token` devuelto en una variable
+   local de Postman y usar la autorización **Bearer Token** en las siguientes
+   solicitudes.
+2. Solicitar un reporte con `POST /api/reportes` y un JSON como
+   `{"fechaDesde":"2026-10-01","fechaHasta":"2026-10-31"}`. Evidenciar
+   `202 Accepted` y guardar el `id` devuelto.
+3. Consultar `GET /api/reportes/{{reportId}}` hasta que el estado sea
+   `completed`; guardar la respuesta con los conteos del reporte.
+4. Probar permisos: `GET /api/reportes/{{reportId}}` sin token debe devolver
+   `401`; con una sesión `USER` debe devolver `403`.
+5. Probar validación de rango enviando una fecha inicial posterior a la final;
+   debe devolver `400`.
+6. Adjuntar la salida de `npm run test:load` junto a las capturas, como
+   evidencia de la concurrencia real probada automáticamente.
+
+No incluir contraseñas, JWT ni otros secretos en capturas o en una colección
+exportada. Usar variables locales o secretos de Postman y ocultar el encabezado
+`Authorization` en la evidencia.
+
+### Índice de evidencias entregadas
+
+Las capturas recibidas están guardadas en [`docs/Requerimientos/`](docs/Requerimientos/).
+Este índice se agrega al registro para identificar qué criterio demuestra cada
+archivo, sin reemplazar ni eliminar las evidencias históricas anteriores.
+
+| Evidencia | Qué muestra | Criterio relacionado |
+|---|---|---|
+| [02- Concurrencia201.png](docs/Requerimientos/02-%20Concurrencia201.png) | Reserva creada con `201 Created`, turno, sala y costo de 50 créditos. | HU01: reserva exitosa y descuento esperado. |
+| [02- Concurrencia409.png](docs/Requerimientos/02-%20Concurrencia409.png) | El mismo turno ocupado responde `409 Conflict`. | HU01: evitar una reserva duplicada. La simultaneidad se demuestra con la prueba de carga, no solo con esta captura secuencial. |
+| [02- ConcurrenciaTest.png](docs/Requerimientos/02-%20ConcurrenciaTest.png) | `npm run test:load`: 25 solicitudes, 1 exitosa, 24 conflictos y 0 errores inesperados. | RNF01 y RNF08: concurrencia y resultados de carga. |
+| [03-reporte.png](docs/Requerimientos/03-reporte.png) | Reporte completado, con fechas, cantidades y desglose por sala. | HU02: consultar el resultado del reporte. |
+| [03-reporte401.png](docs/Requerimientos/03-reporte401.png) | Solicitud de reporte sin token, rechazada con `401 Unauthorized`. | RNF05: autenticación requerida. |
+| [03-reporte403.png](docs/Requerimientos/03-reporte403.png) | Solicitud con usuario sin rol ADMIN, rechazada con `403 Forbidden`. | HU02 y RNF05: autorización por rol. |
+| [04-Persistencia.png](docs/Requerimientos/04-Persistencia.png) | Pantalla de administración con el reporte completado después de ejecutar `docker compose restart`. | HU02 y RNF04: recuperación del resultado tras reiniciar. |
+| [Test-Api.png](docs/Requerimientos/Test-Api.png) | Cuatro pruebas de integración aprobadas, incluidas concurrencia, saldo y reportes. | RNF02, RNF04 y RNF09. |
+| [Test-e2e.png](docs/Requerimientos/Test-e2e.png) | 16 escenarios y 101 pasos BDD aprobados. | RNF09 y escenarios de aceptación. |
+| [Test-load.png](docs/Requerimientos/Test-load.png) | Resultados medidos de carga concurrente y prueba de reporte en segundo plano. | RNF01, RNF03 y RNF08. |
+
+La corrida de carga capturada en `Test-load.png` informa:
+
+| Medición capturada | Resultado |
+|---|---:|
+| Solicitudes de reserva concurrentes | 25 |
+| Exitosas / conflictos esperados / errores inesperados | 1 / 24 / 0 |
+| Latencia media de reserva / p95 | 386,83 ms / 440,15 ms |
+| Registros incluidos en la prueba del reporte | 5.001 |
+| Referencia de cálculo síncrono / aceptación del trabajo asíncrono | 42,58 ms / 20,77 ms |
+| Reducción de latencia de aceptación indicada por el test | 51,23 % |
+| Respuesta de `/health` durante el procesamiento | HTTP 200 en 2,48 ms |
+| Tiempo hasta completar el reporte | 437,44 ms |
+
+La comparación anterior es entre una lectura y conteo síncronos de referencia y
+el tiempo de aceptación del trabajo asíncrono; no representa una comparación
+entre dos versiones equivalentes del mismo endpoint ni mide por sí sola el
+tiempo total del cálculo. Para la presentación, describirla con ese alcance y
+destacar que el resultado final se completó y que `/health` respondió durante
+el procesamiento.
+
+#### Capturas de login pendientes de sanitización
+
+Los archivos `01-login.png`, `01-login2.png` y `01-login3.png` muestran
+contraseñas en texto y, en las capturas de login, tokens de acceso y/o refresh.
+No deben publicarse, adjuntarse a la entrega ni compartirse tal como están.
+Reemplazarlos por capturas recortadas o redactadas que oculten esos valores; si
+se van a incluir, verificar las imágenes sanitizadas antes de enlazarlas aquí.
+Los tokens de acceso vencen en 15 minutos, pero los refresh tokens pueden
+seguir siendo válidos hasta 7 días; no reutilizar ni distribuir los que hayan
+quedado visibles.

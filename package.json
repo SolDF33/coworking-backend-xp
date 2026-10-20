@@ -13,8 +13,11 @@
     "prestart": "npm run db:push",
     "start": "node dist/index.js",
     "predev": "npm run db:push",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "test:e2e": "cross-env NODE_OPTIONS=--import=tsx cucumber-js"
+    "dev": "tsx watch src/index.ts",
+    "pretest:e2e": "cross-env NODE_ENV=test DATABASE_URL=file:./test-e2e.db prisma db push --skip-generate",
+    "test:e2e": "cross-env NODE_ENV=test DATABASE_URL=file:./test-e2e.db JWT_SECRET=test-reservation-jwt-secret NODE_OPTIONS=--import=tsx cucumber-js",
+    "pretest:load": "cross-env NODE_ENV=test DATABASE_URL=file:./load-test.db prisma db push --skip-generate",
+    "test:load": "cross-env NODE_ENV=test DATABASE_URL=file:./load-test.db JWT_SECRET=load-test-jwt-secret tsx tests/load/reservations.ts"
   },
   "keywords": [],
   "author": "",
@@ -29,8 +32,6 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.20.3",
     "cross-env": "^10.1.0",
-    "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   },

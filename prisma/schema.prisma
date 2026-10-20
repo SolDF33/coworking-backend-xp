@@ -42,8 +42,26 @@ model Reserva {
   costoCreditos  Int
   estado         String  @default("Confirmada")
   bloqueActivo   String? @unique
+  createdAt      DateTime @default(now())
+  canceledAt     DateTime?
   usuario        Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId])
   @@index([sala, fecha])
+  @@index([createdAt])
+  @@index([canceledAt])
+}
+
+model ReportJob {
+  id          String   @id
+  dateFrom    String
+  dateTo      String
+  status      String   @default("queued")
+  resultJson  String?
+  error       String?
+  createdAt   DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@index([status, createdAt])
 }

@@ -17,6 +17,7 @@ const mapUsuario = (usuario) => {
 };
 class ReservaRepository {
     database;
+    static colaDeReservas = Promise.resolve();
     constructor(database = prisma_js_1.prisma) {
         this.database = database;
     }
@@ -86,25 +87,36 @@ class ReservaRepository {
         return this.database.sala.update({ where: { id: sala.id }, data: sala });
     }
     async crearReserva(reserva) {
-        return this.database.$transaction(async (transaction) => {
-            const actualizacionSaldo = await transaction.usuario.updateMany({
-                where: {
-                    id: reserva.usuarioId,
-                    saldoCreditos: { gte: reserva.costoCreditos }
-                },
-                data: { saldoCreditos: { decrement: reserva.costoCreditos } }
-            });
-            if (actualizacionSaldo.count === 0) {
-                throw new Error('Saldo insuficiente');
-            }
-            const guardada = await transaction.reserva.create({
-                data: {
-                    ...reserva,
-                    bloqueActivo: `${reserva.sala}:${reserva.fecha}`
-                }
-            });
-            return mapReserva(guardada);
+        const anterior = ReservaRepository.colaDeReservas;
+        let liberar = () => undefined;
+        ReservaRepository.colaDeReservas = new Promise((resolve) => {
+            liberar = resolve;
         });
+        await anterior;
+        try {
+            return await this.database.$transaction(async (transaction) => {
+                const actualizacionSaldo = await transaction.usuario.updateMany({
+                    where: {
+                        id: reserva.usuarioId,
+                        saldoCreditos: { gte: reserva.costoCreditos }
+                    },
+                    data: { saldoCreditos: { decrement: reserva.costoCreditos } }
+                });
+                if (actualizacionSaldo.count === 0) {
+                    throw new Error('Saldo insuficiente');
+                }
+                const guardada = await transaction.reserva.create({
+                    data: {
+                        ...reserva,
+                        bloqueActivo: `${reserva.sala}:${reserva.fecha}`
+                    }
+                });
+                return mapReserva(guardada);
+            });
+        }
+        finally {
+            liberar();
+        }
     }
     async cancelarReserva(id, reembolsar) {
         return this.database.$transaction(async (transaction) => {
@@ -114,7 +126,7 @@ class ReservaRepository {
             }
             const cancelada = await transaction.reserva.updateMany({
                 where: { id, estado: 'Confirmada' },
-                data: { estado: 'Cancelada', bloqueActivo: null }
+                data: { estado: 'Cancelada', bloqueActivo: null, canceledAt: new Date() }
             });
             if (cancelada.count === 0) {
                 return undefined;

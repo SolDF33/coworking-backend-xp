@@ -7,11 +7,12 @@ import {
   readTokens,
   saveTokens
 } from './api';
-import type { Perfil, Reserva, Sala, Tokens } from './api';
+import type { Perfil, Reporte, Reserva, Sala, Tokens } from './api';
 
 type Vista = 'reservar' | 'mis-reservas';
 
 const ZONA_HORARIA = 'America/Argentina/Cordoba';
+const REPORTE_KEY = 'coworking.latest-report';
 const HORARIOS = Array.from({ length: 12 }, (_, index) => `${String(index + 8).padStart(2, '0')}:00`);
 
 const partesHoraLocal = (): Record<string, string> =>
@@ -71,6 +72,11 @@ function App() {
   const [descripcionSala, setDescripcionSala] = useState('');
   const [capacidadSala, setCapacidadSala] = useState('4');
   const [salaEnEdicion, setSalaEnEdicion] = useState<string | null>(null);
+  const [fechaReporteDesde, setFechaReporteDesde] = useState(() => new Date().toISOString().slice(0, 10));
+  const [fechaReporteHasta, setFechaReporteHasta] = useState(() => new Date().toISOString().slice(0, 10));
+  const [reporte, setReporte] = useState<Reporte | null>(null);
+  const [reportes, setReportes] = useState<Reporte[]>([]);
+  const [solicitandoReporte, setSolicitandoReporte] = useState(false);
 
   const esGestor = perfil?.tuRol === 'EDITOR' || perfil?.tuRol === 'ADMIN';
   const salasPorId = useMemo(() => new Map(salas.map((sala) => [sala.id, sala])), [salas]);
@@ -96,6 +102,41 @@ function App() {
       })
       .finally(() => setCargando(false));
   }, [cargarPanel]);
+
+  useEffect(() => {
+    if (perfil?.tuRol !== 'ADMIN') {
+      setReporte(null);
+      setReportes([]);
+      return;
+    }
+    api<Reporte[]>('/reportes')
+      .then((reportes) => {
+        setReportes(reportes);
+        const idGuardado = localStorage.getItem(REPORTE_KEY);
+        const reportePreferido = reportes.find((item) => item.id === idGuardado) ?? reportes[0] ?? null;
+        setReporte(reportePreferido);
+        if (reportePreferido) localStorage.setItem(REPORTE_KEY, reportePreferido.id);
+      })
+      .catch((reason: unknown) => setError(mensajeError(reason)));
+  }, [perfil?.tuRol]);
+
+  useEffect(() => {
+    if (
+      perfil?.tuRol !== 'ADMIN' ||
+      !reporte ||
+      (reporte.estado !== 'queued' && reporte.estado !== 'running')
+    ) return;
+
+    const timer = window.setInterval(() => {
+      api<Reporte>(`/reportes/${encodeURIComponent(reporte.id)}`)
+        .then((actualizado) => {
+          setReporte(actualizado);
+          setReportes((actuales) => actuales.map((item) => item.id === actualizado.id ? actualizado : item));
+        })
+        .catch((reason: unknown) => setError(mensajeError(reason)));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [perfil?.tuRol, reporte]);
 
   useEffect(() => {
     if (!perfil) return;
@@ -243,6 +284,30 @@ function App() {
     setCapacidadSala('4');
   };
 
+  const generarReporte = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    setError('');
+    setAviso('');
+    setSolicitandoReporte(true);
+    try {
+      const nuevoReporte = await api<Reporte>('/reportes', {
+        method: 'POST',
+        body: JSON.stringify({
+          fechaDesde: fechaReporteDesde,
+          fechaHasta: fechaReporteHasta
+        })
+      });
+      localStorage.setItem(REPORTE_KEY, nuevoReporte.id);
+      setReporte(nuevoReporte);
+      setReportes((actuales) => [nuevoReporte, ...actuales.filter((item) => item.id !== nuevoReporte.id)].slice(0, 20));
+      setAviso('El reporte se está generando en segundo plano.');
+    } catch (reason: unknown) {
+      setError(mensajeError(reason));
+    } finally {
+      setSolicitandoReporte(false);
+    }
+  };
+
   if (!perfil) {
     return (
       <main className="auth-layout">
@@ -380,6 +445,71 @@ function App() {
                   ) : <p className="managed-rooms-empty">Todavía no hay espacios registrados.</p>}
                 </div>
               </details>
+            )}
+
+            {perfil.tuRol === 'ADMIN' && (
+              <section className="report-panel" aria-labelledby="report-heading">
+                <div className="report-heading">
+                  <div>
+                    <span className="eyebrow">ANÁLISIS DE DEMANDA</span>
+                    <h2 id="report-heading">Reporte de utilización</h2>
+                    <p className="muted">Generalo sin interrumpir las reservas.</p>
+                  </div>
+                </div>
+                <form className="report-form" onSubmit={generarReporte}>
+                  <label>Desde<input type="date" required value={fechaReporteDesde} onChange={(event) => setFechaReporteDesde(event.target.value)} /></label>
+                  <label>Hasta<input type="date" required min={fechaReporteDesde} value={fechaReporteHasta} onChange={(event) => setFechaReporteHasta(event.target.value)} /></label>
+                  <button className="button button-dark" disabled={solicitandoReporte || reporte?.estado === 'queued' || reporte?.estado === 'running'}>
+                    {solicitandoReporte ? 'Solicitando…' : reporte?.estado === 'queued' || reporte?.estado === 'running' ? 'Generando…' : 'Generar reporte'}
+                  </button>
+                </form>
+                {reportes.length > 0 && (
+                  <label className="report-history">
+                    Reportes guardados
+                    <select
+                      value={reporte?.id ?? ''}
+                      onChange={(event) => {
+                        const seleccionado = reportes.find((item) => item.id === event.target.value) ?? null;
+                        setReporte(seleccionado);
+                        if (seleccionado) localStorage.setItem(REPORTE_KEY, seleccionado.id);
+                      }}
+                    >
+                      {reportes.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.fechaDesde} a {item.fechaHasta} · {item.estado}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {reporte && (
+                  <div className="report-result" aria-live="polite">
+                    <p className="report-status">
+                      Estado: <strong>{reporte.estado === 'queued' ? 'En espera' : reporte.estado === 'running' ? 'Procesando' : reporte.estado === 'completed' ? 'Completado' : 'Error'}</strong>
+                      <span> · Período {reporte.fechaDesde} al {reporte.fechaHasta}</span>
+                    </p>
+                    {reporte.estado === 'failed' && <p className="report-error" role="alert">{reporte.error ?? 'No se pudo generar el reporte.'}</p>}
+                    {reporte.resultado && (
+                      <>
+                        <div className="report-totals">
+                          <div><strong>{reporte.resultado.reservas}</strong><span>Reservas creadas</span></div>
+                          <div><strong>{reporte.resultado.cancelaciones}</strong><span>Cancelaciones</span></div>
+                        </div>
+                        {reporte.resultado.porSala.length > 0 && (
+                          <ul className="report-room-list">
+                            {reporte.resultado.porSala.map((item) => (
+                              <li key={item.salaId}>
+                                <span>{salasPorId.get(item.salaId)?.nombre ?? item.salaId}</span>
+                                <span>{item.reservas} reservas · {item.cancelaciones} cancelaciones</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </section>
             )}
 
             <div className="section-heading">

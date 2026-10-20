@@ -11,7 +11,10 @@ const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const reserva_repository_js_1 = require("./repositories/reserva.repository.js");
 const auth_routes_js_1 = require("./routes/auth.routes.js");
 const reserva_routes_js_1 = require("./routes/reserva.routes.js");
+const reporte_routes_js_1 = require("./routes/reporte.routes.js");
 const reserva_service_js_1 = require("./services/reserva.service.js");
+const reporte_service_js_1 = require("./services/reporte.service.js");
+const reporte_repository_js_1 = require("./repositories/reporte.repository.js");
 const demo_users_js_1 = require("./seeds/demo-users.js");
 const prisma_js_1 = require("./database/prisma.js");
 const app = (0, express_1.default)();
@@ -19,6 +22,7 @@ exports.app = app;
 const port = Number(process.env.PORT ?? 3000);
 const repository = new reserva_repository_js_1.ReservaRepository();
 const reservaService = new reserva_service_js_1.ReservaService(repository);
+const reporteService = new reporte_service_js_1.ReporteService(new reporte_repository_js_1.ReporteRepository());
 const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(',').map((origin) => origin.trim());
 const loginLimiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
@@ -33,6 +37,7 @@ const authRouter = (0, auth_routes_js_1.createAuthRouter)(repository);
 app.use('/api/login', loginLimiter);
 app.use('/api', authRouter);
 app.use('/api/reservas', (0, reserva_routes_js_1.createReservaRouter)(reservaService));
+app.use('/api/reportes', (0, reporte_routes_js_1.createReporteRouter)(reporteService));
 app.get('/health', (_request, response) => {
     response.json({ estado: 'ok' });
 });
@@ -49,6 +54,7 @@ const iniciarServidor = async () => {
     else {
         await (0, demo_users_js_1.cargarAdministradorInicial)(repository);
     }
+    await reporteService.reanudarPendientes();
     app.listen(port, () => {
         console.log(`Backend iniciado en http://localhost:${port}`);
     });

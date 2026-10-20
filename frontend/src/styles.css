@@ -109,6 +109,26 @@ a { color: inherit; text-decoration: none; }
 .managed-rooms li strong { color: #35463a; font-size: 11px; }
 .managed-rooms li span, .managed-rooms-empty { overflow-wrap: anywhere; color: #828a83; font-size: 10px; }
 .managed-rooms-empty { margin: 0; }
+.report-panel { margin-top: 17px; padding: 17px 20px; border: 1px solid #e3e8e1; border-radius: 6px; background: #fff; }
+.report-heading h2 { margin: 7px 0 3px; color: #35463a; font-family: var(--serif); font-size: 17px; }
+.report-heading p { margin: 0; font-size: 11px; }
+.report-form { display: flex; align-items: end; gap: 12px; margin-top: 14px; }
+.report-form label { display: grid; min-width: 160px; gap: 6px; color: #68756b; font-size: 10px; font-weight: 600; }
+.report-form input { height: 38px; padding: 0 9px; border: 1px solid #dfe3dc; border-radius: 5px; color: var(--ink); font-size: 11px; }
+.report-form .button { min-height: 38px; }
+.report-history { display: grid; max-width: 420px; gap: 6px; margin-top: 13px; color: #68756b; font-size: 10px; font-weight: 600; }
+.report-history select { height: 36px; padding: 0 9px; border: 1px solid #dfe3dc; border-radius: 5px; background: #fff; color: var(--ink); font-size: 11px; }
+.report-result { margin-top: 15px; padding-top: 13px; border-top: 1px solid #eceee9; }
+.report-status { margin: 0 0 11px; color: #637065; font-size: 11px; }
+.report-status strong { color: #315f48; }
+.report-status span { color: #8a9289; }
+.report-totals { display: flex; gap: 12px; }
+.report-totals > div { display: grid; min-width: 145px; gap: 4px; padding: 11px 13px; border-radius: 5px; background: #f5f7f3; }
+.report-totals strong { color: #285b42; font-family: var(--serif); font-size: 21px; }
+.report-totals span, .report-room-list { color: #79837a; font-size: 10px; }
+.report-room-list { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.report-room-list li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid #edf0ea; border-radius: 4px; }
+.report-error { color: #a24539; font-size: 11px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin: 39px 0 17px; }
 .section-heading > div { display: flex; align-items: baseline; gap: 12px; }
 .section-heading h2 { margin: 0; font-family: var(--serif); font-size: 19px; font-weight: 700; letter-spacing: -.65px; }
@@ -213,6 +233,12 @@ a { color: inherit; text-decoration: none; }
   .room-title-row { min-height: 52px; }
   .room-form { grid-template-columns: 1fr; }
   .room-form .button { width: 100%; }
+  .report-panel { padding: 14px 13px; }
+  .report-form { align-items: stretch; flex-direction: column; }
+  .report-form label { min-width: 0; }
+  .report-form .button { width: 100%; }
+  .report-totals { flex-wrap: wrap; }
+  .report-room-list li { align-items: start; flex-direction: column; }
   .reservation-card { align-items: start; flex-wrap: wrap; gap: 12px; padding: 13px; }
   .reservation-date-block { width: 48px; height: 52px; }
   .reservation-main { min-width: calc(100% - 65px); }

@@ -5,7 +5,10 @@ import rateLimit from 'express-rate-limit';
 import { ReservaRepository } from './repositories/reserva.repository.js';
 import { createAuthRouter } from './routes/auth.routes.js';
 import { createReservaRouter } from './routes/reserva.routes.js';
+import { createReporteRouter } from './routes/reporte.routes.js';
 import { ReservaService } from './services/reserva.service.js';
+import { ReporteService } from './services/reporte.service.js';
+import { ReporteRepository } from './repositories/reporte.repository.js';
 import { cargarAdministradorInicial, cargarUsuariosDemo } from './seeds/demo-users.js';
 import { prisma } from './database/prisma.js';
 
@@ -13,6 +16,7 @@ const app = express();
 const port = Number(process.env.PORT ?? 3000);
 const repository = new ReservaRepository();
 const reservaService = new ReservaService(repository);
+const reporteService = new ReporteService(new ReporteRepository());
 const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000').split(',').map((origin) => origin.trim());
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -28,6 +32,7 @@ const authRouter = createAuthRouter(repository);
 app.use('/api/login', loginLimiter);
 app.use('/api', authRouter);
 app.use('/api/reservas', createReservaRouter(reservaService));
+app.use('/api/reportes', createReporteRouter(reporteService));
 
 app.get('/health', (_request, response) => {
   response.json({ estado: 'ok' });
@@ -47,6 +52,7 @@ const iniciarServidor = async (): Promise<void> => {
   } else {
     await cargarAdministradorInicial(repository);
   }
+  await reporteService.reanudarPendientes();
 
   app.listen(port, () => {
     console.log(`Backend iniciado en http://localhost:${port}`);

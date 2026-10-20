@@ -26,6 +26,8 @@ const mapUsuario = (usuario: PrismaUsuario): Usuario => {
 };
 
 export class ReservaRepository {
+  private static colaDeReservas: Promise<void> = Promise.resolve();
+
   constructor(private readonly database: PrismaClient = prisma) {}
 
   async listar(): Promise<Reserva[]> {
@@ -107,26 +109,37 @@ export class ReservaRepository {
   }
 
   async crearReserva(reserva: Reserva): Promise<Reserva> {
-    return this.database.$transaction(async (transaction) => {
-      const actualizacionSaldo = await transaction.usuario.updateMany({
-        where: {
-          id: reserva.usuarioId,
-          saldoCreditos: { gte: reserva.costoCreditos }
-        },
-        data: { saldoCreditos: { decrement: reserva.costoCreditos } }
-      });
-      if (actualizacionSaldo.count === 0) {
-        throw new Error('Saldo insuficiente');
-      }
-
-      const guardada = await transaction.reserva.create({
-        data: {
-          ...reserva,
-          bloqueActivo: `${reserva.sala}:${reserva.fecha}`
-        }
-      });
-      return mapReserva(guardada);
+    const anterior = ReservaRepository.colaDeReservas;
+    let liberar: () => void = () => undefined;
+    ReservaRepository.colaDeReservas = new Promise<void>((resolve) => {
+      liberar = resolve;
     });
+    await anterior;
+
+    try {
+      return await this.database.$transaction(async (transaction) => {
+        const actualizacionSaldo = await transaction.usuario.updateMany({
+          where: {
+            id: reserva.usuarioId,
+            saldoCreditos: { gte: reserva.costoCreditos }
+          },
+          data: { saldoCreditos: { decrement: reserva.costoCreditos } }
+        });
+        if (actualizacionSaldo.count === 0) {
+          throw new Error('Saldo insuficiente');
+        }
+
+        const guardada = await transaction.reserva.create({
+          data: {
+            ...reserva,
+            bloqueActivo: `${reserva.sala}:${reserva.fecha}`
+          }
+        });
+        return mapReserva(guardada);
+      });
+    } finally {
+      liberar();
+    }
   }
 
   async cancelarReserva(id: string, reembolsar: boolean): Promise<Reserva | undefined> {
@@ -138,7 +151,7 @@ export class ReservaRepository {
 
       const cancelada = await transaction.reserva.updateMany({
         where: { id, estado: 'Confirmada' },
-        data: { estado: 'Cancelada', bloqueActivo: null }
+        data: { estado: 'Cancelada', bloqueActivo: null, canceledAt: new Date() }
       });
       if (cancelada.count === 0) {
         return undefined;

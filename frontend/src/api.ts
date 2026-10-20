@@ -26,6 +26,25 @@ export interface Reserva {
   estado: 'Confirmada' | 'Cancelada';
 }
 
+export interface Reporte {
+  id: string;
+  fechaDesde: string;
+  fechaHasta: string;
+  estado: 'queued' | 'running' | 'completed' | 'failed';
+  resultado: {
+    fechaDesde: string;
+    fechaHasta: string;
+    reservas: number;
+    cancelaciones: number;
+    porSala: Array<{ salaId: string; reservas: number; cancelaciones: number }>;
+    generadoEn: string;
+  } | null;
+  error: string | null;
+  creadoEn: string;
+  iniciadoEn: string | null;
+  completadoEn: string | null;
+}
+
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
 const TOKEN_KEY = 'coworking.tokens';
 let refreshInFlight: Promise<Tokens> | null = null;
