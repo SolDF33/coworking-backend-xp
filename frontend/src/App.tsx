@@ -51,6 +51,31 @@ const mostrarFecha = (fechaHora: string): string => {
   return `${fecha} · ${hora}`;
 };
 
+const obtenerTiempoRestante = (fechaHora: string): { totalHoras: number; horas: number; minutos: number } => {
+  const [fecha, hora] = fechaHora.split('T');
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  const [horas, minutos] = hora.split(':').map(Number);
+  const objetivo = Date.UTC(anio, mes - 1, dia, horas, minutos);
+  
+  const ahora = partesHoraLocal();
+  const actual = Date.UTC(
+    Number(ahora.year),
+    Number(ahora.month) - 1,
+    Number(ahora.day),
+    Number(ahora.hour),
+    Number(ahora.minute)
+  );
+  
+  const diferenciaMs = objetivo - actual;
+  const totalMinutos = Math.max(0, Math.floor(diferenciaMs / (1000 * 60)));
+  
+  return {
+    totalHoras: diferenciaMs / (1000 * 60 * 60), // Usado para validar si es > 24
+    horas: Math.floor(totalMinutos / 60),
+    minutos: totalMinutos % 60
+  };
+};
+
 function App() {
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [vista, setVista] = useState<Vista>('reservar');
@@ -77,6 +102,7 @@ function App() {
   const [reporte, setReporte] = useState<Reporte | null>(null);
   const [reportes, setReportes] = useState<Reporte[]>([]);
   const [solicitandoReporte, setSolicitandoReporte] = useState(false);
+    const [reservaACancelar, setReservaACancelar] = useState<Reserva | null>(null);
 
   const esGestor = perfil?.tuRol === 'EDITOR' || perfil?.tuRol === 'ADMIN';
   const salasPorId = useMemo(() => new Map(salas.map((sala) => [sala.id, sala])), [salas]);
@@ -158,6 +184,18 @@ function App() {
     };
   }, [perfil, fecha, hora, capacidad]);
 
+  useEffect(() => {
+    if (!aviso) return;
+    const timer = window.setTimeout(() => setAviso(''), 5000);
+    return () => window.clearTimeout(timer);
+  }, [aviso]);
+
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(''), 7000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
   const actualizarPanel = async (): Promise<void> => {
     await cargarPanel();
     const query = new URLSearchParams({ fecha, hora, capacidad });
@@ -219,10 +257,19 @@ function App() {
     }
   };
 
-  const cancelarReserva = async (reserva: Reserva): Promise<void> => {
+    const cancelarReserva = (reserva: Reserva): void => {
+    setReservaACancelar(reserva);
+  };
+
+  const confirmarCancelacion = async (): Promise<void> => {
+    if (!reservaACancelar) return;
+    
+    const reserva = reservaACancelar;
+    setReservaACancelar(null);
     setError('');
     setAviso('');
     setCargando(true);
+
     try {
       const resultado = await api<{ reserva: Reserva; reembolsado: boolean }>(
         `/reservas/${encodeURIComponent(reserva.id)}`,
@@ -562,6 +609,46 @@ function App() {
             )}
           </section>
         )}
+              {reservaACancelar && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-content">
+            <h3>Cancelar reserva</h3>
+            <p>
+              ¿Estás seguro que querés cancelar la reserva de <strong>{salasPorId.get(reservaACancelar.sala)?.nombre ?? 'la sala'}</strong> para el <strong>{mostrarFecha(reservaACancelar.fecha)}</strong>?
+            </p>
+            
+                        <div className="modal-warning">
+              {(() => {
+                const { totalHoras, horas, minutos } = obtenerTiempoRestante(reservaACancelar.fecha);
+                
+                if (totalHoras > 24) {
+                  return `Se te reintegrarán ${reservaACancelar.costoCreditos} créditos.`;
+                }
+
+                let tiempoTexto = '';
+                if (totalHoras <= 0) {
+                  tiempoTexto = 'El turno ya pasó o está por comenzar';
+                } else if (horas === 0) {
+                  tiempoTexto = `Faltan ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}`;
+                } else {
+                  tiempoTexto = `Faltan ${horas} ${horas === 1 ? 'hora' : 'horas'} y ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'}`;
+                }
+
+                return `${tiempoTexto} para el turno: no se reintegrarán créditos.`;
+              })()}
+            </div>
+
+            <div className="modal-actions">
+              <button className="button button-outline" onClick={() => setReservaACancelar(null)}>
+                Volver
+              </button>
+              <button className="button button-dark" onClick={() => void confirmarCancelacion()}>
+                Sí, cancelar reserva
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </main>
       <footer className="site-footer"><span>sur<span className="brand-weight">cowork</span></span><span>Un espacio para cada idea.</span><span>CÓRDOBA · AR</span></footer>
       {cargando && <div className="busy-indicator" role="status"><span className="loader" /><span className="sr-only">Procesando solicitud</span></div>}
