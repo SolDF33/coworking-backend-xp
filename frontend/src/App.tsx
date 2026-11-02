@@ -102,7 +102,8 @@ function App() {
   const [reporte, setReporte] = useState<Reporte | null>(null);
   const [reportes, setReportes] = useState<Reporte[]>([]);
   const [solicitandoReporte, setSolicitandoReporte] = useState(false);
-    const [reservaACancelar, setReservaACancelar] = useState<Reserva | null>(null);
+  const [reservaACancelar, setReservaACancelar] = useState<Reserva | null>(null);
+  const [salaAEliminar, setSalaAEliminar] = useState<Sala | null>(null);
 
   const esGestor = perfil?.tuRol === 'EDITOR' || perfil?.tuRol === 'ADMIN';
   const salasPorId = useMemo(() => new Map(salas.map((sala) => [sala.id, sala])), [salas]);
@@ -331,6 +332,22 @@ function App() {
     setCapacidadSala('4');
   };
 
+  const eliminarSala = async (): Promise<void> => {
+    if (!salaAEliminar) return;
+    const sala = salaAEliminar;
+    setSalaAEliminar(null);
+    setCargando(true);
+    try {
+      await api(`/salas/${sala.id}`, { method: 'DELETE' });
+      await actualizarPanel();
+      setAviso(`El espacio "${sala.nombre}" fue eliminado de la plataforma.`);
+    } catch (reason: unknown) {
+      setError(mensajeError(reason));
+    } finally {
+      setCargando(false);
+    }
+  };
+
   const generarReporte = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setError('');
@@ -474,7 +491,9 @@ function App() {
                   <label>Descripción<input required value={descripcionSala} onChange={(event) => setDescripcionSala(event.target.value)} placeholder="Luz natural, pantalla, café…" /></label>
                   <label>Capacidad<select value={capacidadSala} onChange={(event) => setCapacidadSala(event.target.value)}>{[2, 4, 6, 8, 10, 12].map((value) => <option key={value} value={value}>{value} personas</option>)}</select></label>
                   <div className="room-form-actions">
-                    <button className="button button-dark" disabled={cargando}>{salaEnEdicion ? 'Guardar cambios' : 'Agregar espacio'}</button>
+                    <button className="button button-primary" disabled={cargando}>
+                      {salaEnEdicion ? 'Guardar cambios' : 'Agregar espacio'}
+                    </button>
                     {salaEnEdicion && <button type="button" className="button button-outline" disabled={cargando} onClick={cancelarEdicionSala}>Cancelar edición</button>}
                   </div>
                 </form>
@@ -485,7 +504,10 @@ function App() {
                       {salas.map((sala) => (
                         <li key={sala.id}>
                           <div><strong>{sala.nombre}</strong><span>{sala.capacidad} personas · {sala.descripcion}</span></div>
-                          <button type="button" className="button button-outline" disabled={cargando} onClick={() => editarSala(sala)}>Editar</button>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button type="button" className="button button-outline" disabled={cargando} onClick={() => editarSala(sala)}>Editar</button>
+                            <button type="button" className="button button-outline" style={{ color: '#a24539', borderColor: '#edd5d1' }} disabled={cargando} onClick={() => setSalaAEliminar(sala)}>Eliminar</button>
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -506,7 +528,7 @@ function App() {
                 <form className="report-form" onSubmit={generarReporte}>
                   <label>Desde<input type="date" required value={fechaReporteDesde} onChange={(event) => setFechaReporteDesde(event.target.value)} /></label>
                   <label>Hasta<input type="date" required min={fechaReporteDesde} value={fechaReporteHasta} onChange={(event) => setFechaReporteHasta(event.target.value)} /></label>
-                  <button className="button button-dark" disabled={solicitandoReporte || reporte?.estado === 'queued' || reporte?.estado === 'running'}>
+                  <button className="button button-primary" disabled={solicitandoReporte || reporte?.estado === 'queued' || reporte?.estado === 'running'}>
                     {solicitandoReporte ? 'Solicitando…' : reporte?.estado === 'queued' || reporte?.estado === 'running' ? 'Generando…' : 'Generar reporte'}
                   </button>
                 </form>
@@ -645,6 +667,22 @@ function App() {
               <button className="button button-dark" onClick={() => void confirmarCancelacion()}>
                 Sí, cancelar reserva
               </button>
+            </div>
+          </div>
+        </div>
+        )}
+        
+        {salaAEliminar && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal-content">
+            <h3>Eliminar espacio</h3>
+            <p>¿Estás seguro que querés eliminar <strong>{salaAEliminar.nombre}</strong> de la plataforma?</p>
+            <div className="modal-warning" style={{ background: '#f3f5f0', borderColor: '#e5e7e0', color: '#687a6b' }}>
+              Esta acción ocultará la sala para nuevas reservas, pero mantendrá intacto el historial de reportes pasados.
+            </div>
+            <div className="modal-actions">
+              <button className="button button-outline" onClick={() => setSalaAEliminar(null)}>Cancelar</button>
+              <button className="button button-dark" onClick={() => void eliminarSala()}>Sí, eliminar</button>
             </div>
           </div>
         </div>

@@ -32,6 +32,7 @@ model Sala {
   nombre      String
   descripcion String
   capacidad   Int
+  activa      Boolean @default(true)
 }
 
 model Reserva {

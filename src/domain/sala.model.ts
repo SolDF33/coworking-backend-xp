@@ -3,4 +3,5 @@ export interface Sala {
   nombre: string;
   descripcion: string;
   capacidad: number;
+  activa: boolean
 }

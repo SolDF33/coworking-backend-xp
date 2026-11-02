@@ -83,7 +83,8 @@ export const createAuthRouter = (repository: ReservaRepository): Router => {
         id: crypto.randomUUID(),
         nombre: nombre.trim(),
         descripcion: descripcion.trim(),
-        capacidad
+        capacidad,
+        activa: true 
       });
       return res.status(201).json(sala);
     }
@@ -121,6 +122,28 @@ export const createAuthRouter = (repository: ReservaRepository): Router => {
         capacidad
       });
       return res.json(salaActualizada);
+    }
+  );
+
+  router.delete(
+    '/salas/:id',
+    verificarToken,
+    requerirRol(['ADMIN']),
+    async (req: RequestAutenticado, res) => {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const sala = await repository.obtenerSalaPorId(id);
+      
+      if (!sala || !sala.activa) {
+        return res.status(404).json({ error: 'Sala no encontrada' });
+      }
+
+      try {
+        await repository.eliminarSala(id);
+        return res.status(200).json({ mensaje: 'Sala eliminada lógicamente' });
+      } catch (error: unknown) {
+        const mensaje = error instanceof Error ? error.message : 'Error al eliminar';
+        return res.status(409).json({ error: mensaje });
+      }
     }
   );
 
