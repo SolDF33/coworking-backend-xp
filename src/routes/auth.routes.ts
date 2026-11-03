@@ -16,10 +16,106 @@ export const createAuthRouter = (repository: ReservaRepository): Router => {
   const router = Router();
   const authController = new AuthController(repository);
 
+  /**
+  * @swagger
+  * /api/registro:
+  *   post:
+  *     summary: Registrar un nuevo usuario
+  *     tags: [Auth]
+  *     requestBody:
+  *       required: true
+  *       content:
+  *         application/json:
+  *           schema:
+  *             type: object
+  *             required: [nombre, email, password]
+  *             properties:
+  *               nombre:
+  *                 type: string
+  *                 example: "Juan Pérez"
+  *               email:
+  *                 type: string
+  *                 example: "juan@example.com"
+  *               password:
+  *                 type: string
+  *                 example: "Password123!"
+  *     responses:
+  *       201:
+  *         description: Usuario creado exitosamente
+  *       400:
+  *         description: Datos inválidos
+  *       409:
+  *         description: El email ya está registrado
+  */
   router.post('/registro', authController.register);
+  /**
+  * @swagger
+  * /api/login:
+  *   post:
+  *     summary: Iniciar sesión
+  *     tags: [Auth]
+  *     requestBody:
+  *       required: true
+  *       content:
+  *         application/json:
+  *           schema:
+  *             type: object
+  *             required:
+  *               - email
+  *               - password
+  *             properties:
+  *               email:
+  *                 type: string
+  *                 example: "usuario@example.com"
+  *               password:
+  *                 type: string
+  *                 example: "User123"
+  *     responses:
+  *       200:
+  *         description: Login exitoso (devuelve token y refreshToken)
+  *       401:
+  *         description: Credenciales inválidas
+  */
   router.post('/login', authController.login);
+
+  /**
+  * @swagger
+  * /api/refresh:
+  *   post:
+  *     summary: Renovar el access token
+  *     tags: [Auth]
+  *     requestBody:
+  *       required: true
+  *       content:
+  *         application/json:
+  *           schema:
+  *             type: object
+  *             required: [refreshToken]
+  *             properties:
+  *               refreshToken:
+  *                 type: string
+  *     responses:
+  *       200:
+  *         description: Nuevo token y refreshToken generados
+  *       401:
+  *         description: Refresh token inválido o expirado
+  */
   router.post('/refresh', authController.refresh);
 
+  /**
+  * @swagger
+  * /api/perfil:
+  *   get:
+  *     summary: Obtener el perfil del usuario autenticado
+  *     tags: [Usuarios]
+  *     security:
+  *       - bearerAuth: []
+  *     responses:
+  *       200:
+  *         description: Datos del perfil y saldo de créditos
+  *       401:
+  *         description: No autorizado
+  */
   router.get('/perfil', verificarToken, async (req: RequestAutenticado, res) => {
     const usuario = await repository.obtenerUsuarioPorId(req.usuario!.id);
     if (!usuario) {
@@ -33,10 +129,53 @@ export const createAuthRouter = (repository: ReservaRepository): Router => {
     });
   });
 
+  /**
+  * @swagger
+  * /api/salas:
+  *   get:
+  *     summary: Listar todas las salas activas
+  *     tags: [Salas]
+  *     responses:
+  *       200:
+  *         description: Lista de salas
+  */
   router.get('/salas', async (_req, res) => {
     return res.json(await repository.listarSalas());
   });
 
+  /**
+  * @swagger
+  * /api/salas/disponibles:
+  *   get:
+  *     summary: Buscar salas disponibles por fecha, hora y capacidad
+  *     tags: [Salas]
+  *     parameters:
+  *       - in: query
+  *         name: fecha
+  *         required: true
+  *         schema:
+  *           type: string
+  *           format: date
+  *         description: Fecha en formato AAAA-MM-DD
+  *       - in: query
+  *         name: hora
+  *         required: true
+  *         schema:
+  *           type: string
+  *           example: "10:00"
+  *         description: Hora en formato HH:00
+  *       - in: query
+  *         name: capacidad
+  *         required: false
+  *         schema:
+  *           type: integer
+  *           default: 1
+  *     responses:
+  *       200:
+  *         description: Lista de salas disponibles
+  *       400:
+  *         description: Parámetros inválidos
+  */
   router.get('/salas/disponibles', async (req, res) => {
     try {
       const { fecha, hora } = req.query;
@@ -60,6 +199,39 @@ export const createAuthRouter = (repository: ReservaRepository): Router => {
     }
   });
 
+  /**
+  * @swagger
+  * /api/salas:
+  *   post:
+  *     summary: Crear una nueva sala
+  *     tags: [Salas]
+  *     security:
+  *       - bearerAuth: []
+  *     requestBody:
+  *       required: true
+  *       content:
+  *         application/json:
+  *           schema:
+  *             type: object
+  *             required: [nombre, descripcion, capacidad]
+  *             properties:
+  *               nombre:
+  *                 type: string
+  *                 example: "Sala de Reuniones A"
+  *               descripcion:
+  *                 type: string
+  *                 example: "Luz natural, pantalla, café"
+  *               capacidad:
+  *                 type: integer
+  *                 example: 6
+  *     responses:
+  *       201:
+  *         description: Sala creada exitosamente
+  *       400:
+  *         description: Datos inválidos
+  *       403:
+  *         description: No autorizado (requiere EDITOR o ADMIN)
+  */
   router.post(
     '/salas',
     verificarToken,
@@ -90,6 +262,42 @@ export const createAuthRouter = (repository: ReservaRepository): Router => {
     }
   );
 
+  /**
+  * @swagger
+  * /api/salas/{id}:
+  *   put:
+  *     summary: Editar una sala existente
+  *     tags: [Salas]
+  *     security:
+  *       - bearerAuth: []
+  *     parameters:
+  *       - in: path
+  *         name: id
+  *         required: true
+  *         schema:
+  *           type: string
+  *     requestBody:
+  *       required: true
+  *       content:
+  *         application/json:
+  *           schema:
+  *             type: object
+  *             required: [nombre, descripcion, capacidad]
+  *             properties:
+  *               nombre:
+  *                 type: string
+  *               descripcion:
+  *                 type: string
+  *               capacidad:
+  *                 type: integer
+  *     responses:
+  *       200:
+  *         description: Sala actualizada
+  *       403:
+  *         description: No autorizado
+  *       404:
+  *         description: Sala no encontrada
+  */
   router.put(
     '/salas/:id',
     verificarToken,
@@ -125,6 +333,32 @@ export const createAuthRouter = (repository: ReservaRepository): Router => {
     }
   );
 
+  /**
+   * @swagger
+   * /api/salas/{id}:
+   *   delete:
+   *     summary: Elimina lógicamente una sala (HU09)
+   *     description: Oculta la sala del listado. Requiere rol ADMIN. Falla si hay reservas futuras.
+   *     tags: [Salas]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: ID de la sala
+   *     responses:
+   *       200:
+   *         description: Sala eliminada correctamente
+   *       403:
+   *         description: No autorizado (falta token o no es ADMIN)
+   *       404:
+   *         description: Sala no encontrada
+   *       409:
+   *         description: Conflicto, la sala tiene reservas futuras
+   */
   router.delete(
     '/salas/:id',
     verificarToken,

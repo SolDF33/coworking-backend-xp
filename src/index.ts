@@ -11,6 +11,8 @@ import { ReporteService } from './services/reporte.service.js';
 import { ReporteRepository } from './repositories/reporte.repository.js';
 import { cargarAdministradorInicial, cargarUsuariosDemo } from './seeds/demo-users.js';
 import { prisma } from './database/prisma.js';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -28,12 +30,25 @@ const loginLimiter = rateLimit({
 
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 const authRouter = createAuthRouter(repository);
 app.use('/api/login', loginLimiter);
 app.use('/api', authRouter);
 app.use('/api/reservas', createReservaRouter(reservaService));
 app.use('/api/reportes', createReporteRouter(reporteService));
 
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Verificar el estado de la API
+ *     tags: [Sistema]
+ *     responses:
+ *       200:
+ *         description: API funcionando correctamente
+ */
 app.get('/health', (_request, response) => {
   response.json({ estado: 'ok' });
 });
