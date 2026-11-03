@@ -13,6 +13,7 @@ JWT, autorización por roles y persistencia SQLite con Prisma.
   otros usuarios.
 - Descuento de créditos al confirmar y reembolso por cancelación anticipada.
 - Creación y edición de salas desde la interfaz para roles `EDITOR` y `ADMIN`.
+- Eliminación lógica de salas por parte del rol `ADMIN`, resguardando el historial de reportes y bloqueando la acción si existen reservas futuras.
 - Renovación de sesión con refresh tokens almacenados como hashes.
 - Contenedores separados para el frontend y la API, con volumen persistente
   para SQLite.
@@ -107,6 +108,7 @@ al iniciar sesión en la cabecera HTTP `Authorization`.
 | `GET` | `/api/salas/disponibles?fecha=AAAA-MM-DD&hora=HH:00&capacidad=1` | Público |
 | `POST` | `/api/salas` | `EDITOR` o `ADMIN` |
 | `PUT` | `/api/salas/:id` | `EDITOR` o `ADMIN` |
+| `DELETE` | `/api/salas/:id` | `ADMIN`; baja lógica de la sala |
 | `GET` | `/api/reportes` | `ADMIN`; lista los 20 reportes más recientes |
 | `POST` | `/api/reportes` | `ADMIN`; solicita un reporte |
 | `GET` | `/api/reportes/:id` | `ADMIN`; consulta estado y resultado |
@@ -173,7 +175,7 @@ npm run build --prefix frontend
 disponibilidad, prevención de solapamientos, saldo, reembolsos y permisos usando
 una base de datos SQLite de prueba.
 
-La suite BDD actual contiene 12 escenarios y 51 pasos.
+La suite BDD actual contiene 19 escenarios y 126 pasos.
 
 ### Evidencias históricas de Postman
 
@@ -262,13 +264,23 @@ secciones y evidencias anteriores se conservan como historial del proyecto.
 - La interfaz administrativa permite solicitar el reporte, ver su estado y
   consultar los resultados.
 
+### Baja lógica de salas (HU09)
+
+- Las salas ahora cuentan con un campo `activa`. El endpoint `DELETE /api/salas/:id` (solo ADMIN) realiza una baja lógica (`activa: false`), ocultándola de los listados públicos y de disponibilidad, pero manteniendo su registro en la base de datos para que los reportes históricos sigan funcionando.
+- La baja se rechaza con `409 Conflict` si la sala tiene reservas futuras confirmadas.
+
+### Documentación interactiva con Swagger
+
+- Se incorporó Swagger UI en la ruta `/api/docs` para documentar y probar todos los endpoints de la API.
+- La interfaz incluye la configuración de seguridad Bearer JWT (botón "Authorize") para probar rutas protegidas, y agrupa los endpoints por categorías (Auth, Salas, Reservas, Reportes) mediante tags.
+
 ### Verificación automatizada de esta etapa
 
 Los escenarios BDD anteriores siguen registrados arriba como evidencia de la
-etapa previa: 12 escenarios y 51 pasos. Con los nuevos escenarios, la suite
-actual ejecuta **16 escenarios y 101 pasos**. `npm run test:api` agrega pruebas
-de simultaneidad, saldo insuficiente, permisos y persistencia/recuperación de
-reportes.
+etapa previa: 12 escenarios y 51 pasos. Con los nuevos escenarios (concurrencia, 
+reportes y baja lógica de salas), la suite actual ejecuta **19 escenarios y 126 pasos**. 
+`npm run test:api` agrega pruebas de simultaneidad, saldo insuficiente, permisos, 
+persistencia/recuperación de reportes y baja lógica de salas.
 
 `npm run test:load` usa una base SQLite de prueba independiente de la base local
 y del volumen Docker. Envía 25 reservas simultáneas para el mismo turno y mide
