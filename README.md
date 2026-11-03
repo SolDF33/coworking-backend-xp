@@ -175,7 +175,7 @@ npm run build --prefix frontend
 disponibilidad, prevención de solapamientos, saldo, reembolsos y permisos usando
 una base de datos SQLite de prueba.
 
-La suite BDD actual contiene 19 escenarios y 126 pasos.
+La suite BDD actual contiene 20 escenarios y 132 pasos.
 
 ### Evidencias históricas de Postman
 
@@ -278,7 +278,7 @@ secciones y evidencias anteriores se conservan como historial del proyecto.
 
 Los escenarios BDD anteriores siguen registrados arriba como evidencia de la
 etapa previa: 12 escenarios y 51 pasos. Con los nuevos escenarios (concurrencia, 
-reportes y baja lógica de salas), la suite actual ejecuta **19 escenarios y 126 pasos**. 
+reportes, persistencia y baja lógica de salas), la suite actual ejecuta **20 escenarios y 130 pasos**. 
 `npm run test:api` agrega pruebas de simultaneidad, saldo insuficiente, permisos, 
 persistencia/recuperación de reportes y baja lógica de salas.
 

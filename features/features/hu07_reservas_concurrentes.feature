@@ -15,3 +15,9 @@ Feature: Reservas concurrentes de salas
     When intenta reservar el turno "11:00" del "2099-05-20"
     Then la reserva debe responder 409 y no crearse
     And el saldo debe permanecer en 20 créditos
+
+  Scenario: Persistencia de una reserva
+    Given que un usuario realizó una reserva exitosamente
+    When se reinicia la aplicación
+    Then la reserva debe continuar registrada
+    And el saldo del usuario debe conservarse correctamente

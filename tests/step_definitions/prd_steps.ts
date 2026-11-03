@@ -20,6 +20,9 @@ import { app } from '../../src/index.js';
 import { JWT_SECRET } from '../../src/middlewares/auth.middleware.js';
 import { prisma } from '../../src/database/prisma.js';
 
+let idReservaPersistida = '';
+const fechaReservaPersistida = '2099-12-01'; 
+
 interface ResultadoApi {
   status: number;
   body: {
@@ -269,4 +272,46 @@ Then('la solicitud del reporte debe rechazarse con HTTP 403', function (this: Su
 
 Then('no debe crearse un trabajo de reporte', async function () {
   assert.equal(await prisma.reportJob.count(), 0);
+});
+
+Given('que un usuario realizó una reserva exitosamente', async function (this: SurCoworkWorld) {
+  const respuesta = await llamarApi(
+    this.baseUrl,
+    '/api/reservas',
+    this.usuarioUno.token,
+    { salaId: this.salaId, fecha: fechaReservaPersistida, hora: '15:00' }
+  );
+  
+  assert.equal(respuesta.status, 201, 'La reserva inicial debería crearse con éxito');
+  idReservaPersistida = respuesta.body.id as string;
+});
+
+When('se reinicia la aplicación', async function () {
+  await prisma.$disconnect();
+  await prisma.$connect();
+});
+
+Then('la reserva debe continuar registrada', async function (this: SurCoworkWorld) {
+  const respuesta = await llamarApi(
+    this.baseUrl,
+    '/api/reservas',
+    this.usuarioUno.token
+  );
+  
+  assert.equal(respuesta.status, 200);
+  const reservas = respuesta.body as unknown as Array<{ id: string }>;
+  const existe = reservas.some((r) => r.id === idReservaPersistida);
+  
+  assert.ok(existe, 'La reserva no se encontró en la base de datos después del reinicio');
+});
+
+Then('el saldo del usuario debe conservarse correctamente', async function (this: SurCoworkWorld) {
+  const respuesta = await llamarApi(
+    this.baseUrl,
+    '/api/perfil',
+    this.usuarioUno.token
+  );
+  
+  assert.equal(respuesta.status, 200);
+  assert.equal(respuesta.body.saldoCreditos, 50, 'El saldo no se mantuvo correctamente');
 });
