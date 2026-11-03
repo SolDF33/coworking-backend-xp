@@ -63,7 +63,7 @@ export class ReservaRepository {
 
   async listarSalasDisponibles(fecha: string, hora: string, capacidad: number): Promise<Sala[]> {
     const salas = await this.database.sala.findMany({
-      where: { capacidad: { gte: capacidad } },
+      where: { activa: true, capacidad: { gte: capacidad } },
       orderBy: { nombre: 'asc' }
     });
     const reservasActivas = await this.database.reserva.findMany({
@@ -93,7 +93,7 @@ export class ReservaRepository {
   }
 
   async listarSalas(): Promise<Sala[]> {
-    return this.database.sala.findMany();
+    return this.database.sala.findMany({ where: { activa: true } });
   }
 
   async guardarSala(sala: Sala): Promise<Sala> {
@@ -190,5 +190,24 @@ export class ReservaRepository {
 
   async revocarRefreshToken(tokenHash: string): Promise<void> {
     await this.database.refreshToken.deleteMany({ where: { tokenHash } });
+  }
+
+    async eliminarSala(id: string): Promise<void> {
+    const reservasFuturas = await this.database.reserva.count({
+      where: { 
+        sala: id, 
+        estado: 'Confirmada',
+        fecha: { gte: new Date().toISOString().slice(0, 16) } 
+      }
+    });
+
+    if (reservasFuturas > 0) {
+      throw new Error('No se puede eliminar la sala porque tiene reservas futuras confirmadas.');
+    }
+
+    await this.database.sala.update({
+      where: { id },
+      data: { activa: false }
+    });
   }
 }
